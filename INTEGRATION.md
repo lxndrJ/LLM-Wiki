@@ -9,7 +9,63 @@ Dieses LLM-Wiki ist ein reines Markdown-Datei-Verzeichnis. Open WebUI kann es al
 
 ---
 
-## Weg 0 — Mit Open Terminal (Computer-Substrat) [empfohlen]
+## Existierende Knowledge Base übernehmen (PDFs schon verarbeitet)
+
+Wenn du in Open WebUI schon eine Knowledge Base mit verarbeiteten PDFs hast, musst du die Textextraktion **nicht** nochmal machen. Open WebUI hat die PDFs bereits extrahiert (Text + Embeddings). Es gibt drei Wege, die vorhandenen Daten ins Wiki zu übernehmen:
+
+### Weg KB-1 — Export als ZIP [empfohlen, manuell]
+
+Laut [Open-WebUI-Doku](https://docs.openwebui.com/features/workspace/knowledge/) können **Admins** eine ganze Knowledge Base als ZIP exportieren — drei Punkte → **Export**. Dateien werden zu `.txt` konvertiert.
+
+1. In Open WebUI: **Workspace → Knowledge** → deine KB → drei Punkte → **Export**.
+2. ZIP herunterladen und entpacken.
+3. Die `.txt`-Dateien als Quellen ins Wiki übernehmen:
+   ```bash
+   cd ~/LLM-Wiki
+   unzip ~/Downloads/kb-export.zip -d /tmp/kb-export
+   cp /tmp/kb-export/*.txt raw/
+   ```
+4. Dem Agenten sagen: „Ingeste `raw/<datei>.txt`" — das LLM nimmt die schon extrahierten Texte auf. Keine PDF-Verarbeitung mehr nötig.
+
+### Weg KB-2 — REST API [für Automatisierung]
+
+```bash
+# Knowledge Bases auflisten
+curl -s http://localhost:8080/api/v1/knowledge/ \
+  -H "Authorization: Bearer $OPENWEBUI_API_KEY" | jq '.[] | {id, name}'
+
+# Dateien einer KB abrufen und Inhalt ziehen
+KB_ID=...   # aus dem vorigen Schritt
+curl -s "http://localhost:8080/api/v1/knowledge/$KB_ID" \
+  -H "Authorization: Bearer $OPENWEBUI_API_KEY" | jq '.files'
+```
+Siehe [API access](https://docs.openwebui.com/features/workspace/knowledge/#api-access) in der Doku.
+
+### Weg KB-3 — Direkt aus dem `uploads/`-Ordner [nur mit Dateisystemzugriff]
+
+Open WebUI speichert Originaldateien in `/app/backend/data/uploads/` (Docker) bzw. `data/uploads/` (bare metal). Die extrahierten Texte liegen in `webui.db` (SQLite). Mit Dateisystemzugriff kopierst du die Originale direkt:
+
+```bash
+# Docker
+docker cp open-webui:/app/backend/data/uploads/ /tmp/owui-uploads/
+cp /tmp/owui-uploads/*.pdf raw/
+
+# bare metal
+cp /pfad/zu/open-webui/data/uploads/*.pdf raw/
+```
+
+### Übernahme-Workflow im Wiki
+
+Egal welcher Weg — sobald die Dateien in `raw/` liegen:
+
+1. **Quelle in `raw/`** (Original-PDF oder extrahiertes `.txt`).
+2. **Im Chat**: „Ingeste `raw/<datei>`".
+3. Der Agent liest, zeigt Takeaways, schreibt `wiki/sources/…`, aktualisiert `wiki/index.md` + `wiki/log.md`.
+4. Im Log-Eintrag notiert er die Herkunft: `Quelle: Open WebUI KB-Export`.
+
+**Wichtig**: wenn du `.txt` aus dem KB-Export ingestest, überspringt der PDF-Workflow aus `AGENTS.md` den Extraktionsschritt — der Text ist ja schon da. Der Agent erkennt das am Dateityp und ingestet direkt.
+
+---
 
 **Open Terminal** ist Open WebUIs Computer-Substrat: ein realer Workspace mit Shell, Dateisystem und Paketmanager, den der Agent aus dem Chat ansteuert. Es vollendet das Agent-Harness — das Modell kann planen, Dateien erstellen, Code ausführen, Ausgaben prüfen und bis zu einem fertigen Artefakt weiterarbeiten. Siehe [docs.openwebui.com/features/open-terminal](https://docs.openwebui.com/features/open-terminal/).
 
@@ -110,6 +166,7 @@ Open WebUI pflegt → Obsidian browsen. Das entspricht genau dem Setup, das Karp
 ## Empfehlung für den Start
 
 - **Hat dein LLM Dateizugriff/Terminal?** → **Weg 0** (direkt, kein MCP). Das ist der einfachste und mächtigste Weg.
+- **Schon PDFs in einer Open WebUI Knowledge Base?** → **„Existierende Knowledge Base übernehmen"** (Export als ZIP, .txt direkt ingesten — keine doppelte Extraktion).
 - **Nur Lesen nötig, kein Schreiben?** → **Weg 1** (Knowledge Base).
 - **Chat-Client hat keinen Dateizugriff, aber du willst pflegen?** → **Weg 2** (Agent mit Custom-Tool) oder **Weg 3** (MCP-Server, liegt bereit unter `wiki_mcp/`, konfiguriert in `mcp.json`).
 - **Optional zum Browsen** → **Weg 4** (Obsidian parallel).
