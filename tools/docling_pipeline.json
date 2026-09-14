@@ -1,0 +1,12 @@
+{
+  "do_ocr": true,
+  "pdf_backend": "dlparse_v4",
+  "table_mode": "accurate",
+  "ocr_engine": "tesseract",
+  "ocr_lang": [
+    "de"
+  ],
+  "do_picture_description": true,
+  "picture_description_api": "{\"url\": \"http://ollama:11434/v1/chat/completions\", \"params\": {\"model\": \"llava:latest\"}, \"timeout\": 60, \"prompt\": \"Describe this image in great detail.\"}",
+  "do_formula_enrichment": true
+}

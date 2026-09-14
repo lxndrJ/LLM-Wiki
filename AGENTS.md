@@ -70,13 +70,29 @@ Eine Quelle kann 10–15 Seiten berühren. Das ist erwünscht.
 PDFs sind keine reinen Markdown-Dateien und müssen vor dem Ingest in Text überführt werden. Der Ablauf:
 
 1. **PDF ablegen** — Nutzer legt die Datei nach `raw/<name>.pdf` (z. B. `raw/2026-04-report.pdf`). Die PDF bleibt als unveränderliche Quelle stehen; nie überschreiben.
-2. **Extrahieren** — du extrahierst den Text mit `python tools/extract_pdf.py raw/<name>.pdf > raw/<name>.md`. Falls `pypdf` fehlt, installiere es: `pip install pypdf`. Das entstehende `raw/<name>.md` ist die *textuelle* Repräsentation der Quelle und wird als Ingest-Input benutzt; die PDF bleibt Referenz.
+2. **Extrahieren** — Standardweg ist die **docling-serve REST-API** (erfasst Layout, Lesereihenfolge, Tabellenstruktur via TableFormer, per OCR gescannte Seiten sowie per VLM Bildbeschreibungen). Das Skript `tools/extract_pdf_docling.py` lädt die PDF als multipart upload an einen laufenden docling-serve-Service und schreibt das zurückkommende Markdown nach stdout:
+   ```
+   python tools/extract_pdf_docling.py raw/<name>.pdf > raw/<name>.md
+   ```
+   Service-URL und API-Key über Umgebungsvariablen (Default: `http://localhost:5001`):
+   ```
+   DOCLING_SERVE_URL=http://docling:5001 python tools/extract_pdf_docling.py raw/<name>.pdf > raw/<name>.md
+   DOCLING_SERVE_API_KEY=... python tools/extract_pdf_docling.py raw/<name>.pdf > raw/<name>.md
+   ```
+   Die Pipeline-Optionen liegen in `tools/docling_pipeline.json` (OCR an, `dlparse_v4`-Backend, `accurate`-Tabellen, Tesseract/de, Bildbeschreibung via Ollama/llava, Formel-Anreicherung). Für eine abweichende Konfiguration eine eigene JSON-Datei mit `--config` übergeben. Wichtig: die Bildbeschreibung über `picture_description_api` benötigt einen mit `DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true` gestarteten docling-serve.
+   Ist der Service nicht erreichbar oder nur der reine Text-Layer gewünscht, fälltst du auf pypdf zurück:
+   ```
+   python tools/extract_pdf_docling.py raw/<name>.pdf --fallback > raw/<name>.md
+   # oder direkt das pypdf-Skript:
+   python tools/extract_pdf.py raw/<name>.pdf > raw/<name>.md
+   ```
+   Das entstehende `raw/<name>.md` ist die *textuelle* Repräsentation der Quelle und wird als Ingest-Input benutzt; die PDF bleibt Referenz.
 3. **Takeaways besprechen** — wie oben: 3–5 Kernaussagen aus dem extrahierten Text nennen, bevor du schreibst.
 4. **Ingest** — Quelle für den Ingest ist `raw/<name>.md` (die extrahierte Version), verweist aber in der Zusammenfassungsseite auf die PDF als Original: `Quelle: raw/<name>.pdf`.
-5. **Seiten prüfen** — bei langen/wichtigen PDFs lohnt es sich, den extrahierten Text seitenweise zu scannen, bevor du extrahierst: `pdftotext -layout raw/<name>.pdf - | head -200`. Bilder, Tabellen und Scans werden von `pypdf` nicht erfasst — solche Inhalte als Lücke notieren (`> ⚠️ Lücke: Seite N enthält Tabelle/Bild, nicht textuell erfasst.`) und ggf. vorschlagen, die PDF-Seite separat zu betrachten.
-6. **Index + Log** — wie immer; im Log-Eintrag zusätzlich `Format: pdf` notieren.
+5. **Seiten prüfen** — bei langen/wichtigen PDFs lohnt es sich, den extrahierten Text seitenweise zu scannen. Die docling-serve-API liefert strukturiertes Markdown (Überschriften, Tabellen, Listen, ggf. Bildbeschreibungen); trotzdem noch grob validieren, ob die Layout-Erkennung plausible Ergebnisse liefert. Bleiben Inhalte (z. B. komplexere Bilder, die der VLM nicht beschrieben hat) als Lücke, notiere sie: `> ⚠️ Lücke: Seite N enthält Bild, nicht textuell erfasst.` und schlage ggf. vor, die PDF-Seite separat zu betrachten.
+6. **Index + Log** — wie immer; im Log-Eintrag zusätzlich `Format: pdf`, `Extraktor: docling-serve` (bzw. `pypdf` beim Fallback) und ggf. `Service-URL: <url>` notieren.
 
-**Wichtig**: die extrahierte `.md` zählt als Hilfsdatei, nicht als neue eigenständige Quelle. Das Original ist die PDF; die `.md` ist nur die maschinenlesbare Form davon.
+**Wichtig**: die extrahierte `.md` zählt als Hilfsdatei, nicht als neue eigenständige Quelle. Das Original ist die PDF; die `.md` ist nur die maschinenlesbare Form davon. Über docling-serve wird die `.md` deutlich strukturierter und verlässlicher (Layout + Tabellen + OCR + Bildbeschreibung) als mit pypdf allein — daher ist die REST-API der Standard.
 
 ### 2. Query (Frage beantworten)
 
